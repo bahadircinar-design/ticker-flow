@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticker Flow</title>
+<style>
+[hidden]{display:none!important}
+html{color-scheme:light dark}
+body{margin:0}
+/* Layout: workbench — node palette | wiring canvas | inspector, with the analysis report docked below */
+:root{
+  --bg:#eceee9; --panel:#f8f9f5; --canvas:#e2e5de; --dot:rgba(30,40,34,.16);
+  --ink:#1a1f1c; --muted:#5b645d; --line:#cdd3c9; --raised:#ffffff;
+  --accent:#2753c9; --accent-soft:rgba(39,83,201,.12);
+  --up:#15834e; --down:#c23e36; --warn:#a86f12;
+  --c-source:#2753c9; --c-criteria:#a86f12; --c-test:#7448c2; --c-logic:#2f7487; --c-output:#1a1f1c;
+  --shadow:0 1px 2px rgba(20,30,24,.08),0 6px 18px rgba(20,30,24,.08);
+  --f-display:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+  --f-body:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;
+  --f-mono:ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111412; --panel:#181c19; --canvas:#0d100e; --dot:rgba(220,235,225,.10);
+  --ink:#e4e9e3; --muted:#949e95; --line:#2b322d; --raised:#1f2420;
+  --accent:#86a6ff; --accent-soft:rgba(134,166,255,.14);
+  --up:#43c383; --down:#f0716a; --warn:#e0a747;
+  --c-source:#86a6ff; --c-criteria:#e0a747; --c-test:#ad8bf2; --c-logic:#73b6c9; --c-output:#e4e9e3;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.35); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111412; --panel:#181c19; --canvas:#0d100e; --dot:rgba(220,235,225,.10);
+  --ink:#e4e9e3; --muted:#949e95; --line:#2b322d; --raised:#1f2420;
+  --accent:#86a6ff; --accent-soft:rgba(134,166,255,.14);
+  --up:#43c383; --down:#f0716a; --warn:#e0a747;
+  --c-source:#86a6ff; --c-criteria:#e0a747; --c-test:#ad8bf2; --c-logic:#73b6c9; --c-output:#e4e9e3;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.35); color-scheme:dark}
+
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:13px/1.45 var(--f-body);overflow:hidden;-webkit-user-select:none;user-select:none}
+input,textarea,td,dd,.insp p{-webkit-user-select:text;user-select:text}
+.native button,.native .item{cursor:default}
+.brand{letter-spacing:-.02em}
+*{box-sizing:border-box}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.app{height:100%;display:grid;grid-template-rows:auto 1fr auto;grid-template-columns:232px minmax(0,1fr) 312px;
+  grid-template-areas:"top top top" "pal cv insp" "rep rep rep"}
+.top{grid-area:top;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{font:700 20px/1 var(--f-display);letter-spacing:-.01em;display:flex;align-items:center;gap:8px}
+.brand svg{flex:none}
+.brand small{font:500 11px var(--f-mono);color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-left:4px}
+.spacer{flex:1}
+.ctl{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.ctl select,.btn{height:32px;border:1px solid var(--line);background:var(--raised);border-radius:7px;padding:0 10px;font-size:13px}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:600}
+.live{font:500 11px var(--f-mono);color:var(--muted);display:flex;align-items:center;gap:6px}
+.live i{width:7px;height:7px;border-radius:50%;background:var(--up);display:inline-block}
+
+/* palette */
+.pal{grid-area:pal;border-right:1px solid var(--line);background:var(--panel);overflow:auto;padding:12px 12px 20px;min-height:0}
+.pal input{width:100%;height:32px;border:1px solid var(--line);border-radius:7px;background:var(--raised);padding:0 10px;margin-bottom:10px}
+.pal h3{font:600 10.5px var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:14px 2px 6px;display:flex;align-items:center;gap:6px}
+.pal h3 i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.item{display:block;width:100%;text-align:left;border:1px solid transparent;background:none;border-radius:7px;padding:6px 8px}
+.item:hover{background:var(--raised);border-color:var(--line)}
+.item b{display:block;font-weight:600;font-size:13px}
+.item span{display:block;font-size:11.5px;color:var(--muted);line-height:1.35}
+.pal .hint{font-size:11.5px;color:var(--muted);margin:14px 2px 0}
+
+/* canvas */
+.cv{grid-area:cv;position:relative;overflow:hidden;background:var(--canvas);min-height:0;touch-action:none;cursor:grab}
+.cv.panning{cursor:grabbing}
+.cv .gridbg{position:absolute;inset:0;background-image:radial-gradient(var(--dot) 1.2px,transparent 1.3px);pointer-events:none}
+.world{position:absolute;left:0;top:0;transform-origin:0 0}
+.wires{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.wire{fill:none;stroke:var(--muted);stroke-width:2;pointer-events:stroke;cursor:pointer}
+.wire.hit{stroke:transparent;stroke-width:14}
+.wire.sel{stroke:var(--accent);stroke-width:2.5}
+.wire.temp{stroke:var(--accent);stroke-dasharray:5 4}
+.wdel{pointer-events:all;cursor:pointer}
+.wdel circle{fill:var(--raised);stroke:var(--accent)}
+.wdel path{stroke:var(--accent);stroke-width:1.6}
+.zoomctl{position:absolute;right:12px;bottom:12px;display:flex;gap:4px;z-index:5}
+.zoomctl button{width:30px;height:30px;border:1px solid var(--line);background:var(--raised);border-radius:7px;font:500 14px var(--f-mono)}
+
+.node{position:absolute;width:224px;background:var(--raised);border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);cursor:default;user-select:none}
+.node.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft),var(--shadow)}
+.node .hd{display:flex;align-items:center;gap:8px;height:44px;padding:0 10px 0 12px;cursor:move;border-bottom:1px solid var(--line)}
+.node .tag{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;font:600 10px var(--f-mono);color:var(--raised);flex:none}
+.node .nm{font-weight:600;font-size:13px;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node .x{border:0;background:none;color:var(--muted);width:22px;height:22px;border-radius:5px;font-size:15px;line-height:1}
+.node .x:hover{background:var(--bg);color:var(--down)}
+.node .bd{padding:8px 12px 10px;font:12px/1.4 var(--f-mono);color:var(--muted);display:grid;gap:6px}
+.node .sum{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.node .st{display:flex;align-items:center;gap:6px;color:var(--ink);min-width:0}
+.node .st .v{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.port{position:absolute;top:15px;width:14px;height:14px;border-radius:50%;background:var(--raised);border:2px solid var(--muted);touch-action:none}
+.port.in{left:-8px}
+.port.out{right:-8px;cursor:crosshair}
+.port:hover,.port.target{border-color:var(--accent);background:var(--accent)}
+
+.chip{display:inline-flex;align-items:center;gap:4px;font:600 10.5px var(--f-mono);letter-spacing:.04em;padding:2px 7px;border-radius:999px;text-transform:uppercase;white-space:nowrap;flex:none}
+.chip.pass{color:var(--up);background:color-mix(in srgb,var(--up) 14%,transparent)}
+.chip.fail{color:var(--down);background:color-mix(in srgb,var(--down) 14%,transparent)}
+.chip.info{color:var(--muted);background:color-mix(in srgb,var(--muted) 14%,transparent)}
+.chip.err{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+
+/* inspector */
+.insp{grid-area:insp;border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:16px;min-height:0}
+.insp h2{font:700 18px/1.2 var(--f-display);margin:0 0 2px;text-wrap:balance}
+.insp .cat{font:600 10.5px var(--f-mono);letter-spacing:.09em;text-transform:uppercase}
+.insp p{color:var(--muted);font-size:12.5px;margin:8px 0 14px}
+.fld{display:grid;gap:4px;margin-bottom:12px}
+.fld label{font-size:12px;font-weight:500}
+.fld input,.fld select,.fld textarea{border:1px solid var(--line);background:var(--raised);border-radius:7px;padding:6px 9px;font-size:13px;width:100%}
+.fld textarea{font:11.5px/1.4 var(--f-mono);min-height:120px;resize:vertical}
+.fld .help{font-size:11px;color:var(--muted)}
+.outbox{border-top:1px solid var(--line);margin-top:6px;padding-top:12px}
+.outbox h4{font:600 10.5px var(--f-mono);letter-spacing:.09em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12.5px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font:500 12.5px var(--f-mono);font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);font-size:13px}
+.empty ol{padding-left:18px;margin:8px 0}
+
+/* report */
+.rep{grid-area:rep;border-top:1px solid var(--line);background:var(--panel);height:340px;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);min-height:0}
+.rep .lft{padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0;min-height:0;border-right:1px solid var(--line)}
+.rep .rgt{overflow:auto;min-width:0;min-height:0}
+.rh{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+.rh .sym{font:700 22px/1 var(--f-display)}
+.rh .px{font:500 15px var(--f-mono);font-variant-numeric:tabular-nums}
+.rh .src{font:500 10.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.verdict{margin-left:auto;display:flex;align-items:center;gap:10px}
+.verdict .lbl{font:700 16px var(--f-display)}
+.gauge{width:120px;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--down),var(--line) 50%,var(--up));position:relative}
+.gauge i{position:absolute;top:-4px;width:4px;height:16px;border-radius:2px;background:var(--ink);transform:translateX(-2px)}
+.chartwrap{flex:1;min-height:0;position:relative}
+.chartwrap canvas{position:absolute;inset:0;width:100%;height:100%}
+.legend{display:flex;gap:14px;font:11px var(--f-mono);color:var(--muted);flex-wrap:wrap}
+.legend i{display:inline-block;width:12px;height:2px;vertical-align:middle;margin-right:5px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{position:sticky;top:0;background:var(--panel);text-align:left;font:600 10.5px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:10px 12px;border-bottom:1px solid var(--line)}
+td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td .d{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
+tr.click{cursor:pointer} tr.click:hover td{background:var(--raised)}
+.bar{display:inline-block;width:46px;height:6px;background:var(--line);border-radius:3px;position:relative;vertical-align:middle;margin-right:6px}
+.bar i{position:absolute;top:0;height:6px;border-radius:3px}
+.disc{font-size:11px;color:var(--muted);padding:10px 12px}
+
+@media (max-width:980px){
+  body{overflow:auto}
+  html,body{height:auto}
+  .app{display:flex;flex-direction:column;height:auto}
+  .pal{border-right:0;border-bottom:1px solid var(--line);max-height:260px}
+  .cv{height:460px;flex:none}
+  .insp{border-left:0;border-top:1px solid var(--line)}
+  .rep{height:auto;grid-template-columns:1fr}
+  .rep .lft{border-right:0;border-bottom:1px solid var(--line);height:340px}
+  .verdict{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><circle cx="4" cy="16" r="3" fill="var(--c-source)"/><circle cx="18" cy="6" r="3" fill="var(--up)"/><path d="M7 15 C 12 15, 10 7, 15 7" stroke="var(--muted)" stroke-width="2" fill="none"/></svg>
+      Ticker Flow <small>analysis workbench</small>
+    </div>
+    <span class="spacer"></span>
+    <label class="ctl" for="tpl">Template
+      <select id="tpl">
+        <option value="trend">Trend follower</option>
+        <option value="revert">Mean reversion</option>
+        <option value="risk">Risk &amp; robustness</option>
+        <option value="quality">Quality + momentum</option>
+        <option value="blank">Blank canvas</option>
+      </select>
+    </label>
+    <button class="btn" id="loadTpl">Load</button>
+    <button class="btn" id="fit">Fit view</button>
+    <button class="btn" id="refresh" hidden>Refresh prices</button>
+    <span class="live"><i></i>Runs on every change</span>
+  </header>
+
+  <aside class="pal" id="pal" aria-label="Node library"></aside>
+
+  <main class="cv" id="cv" aria-label="Workflow canvas">
+    <div class="gridbg" id="gridbg"></div>
+    <div class="world" id="world">
+      <svg class="wires" id="wires" width="1" height="1"></svg>
+      <div id="nodes"></div>
+    </div>
+    <div class="zoomctl"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button></div>
+  </main>
+
+  <aside class="insp" id="insp" aria-label="Inspector"></aside>
+
+  <section class="rep" id="rep" aria-label="Analysis report">
+    <div class="lft">
+      <div class="rh" id="rh"></div>
+      <div class="legend" id="legend"></div>
+      <div class="chartwrap"><canvas id="chart"></canvas></div>
+    </div>
+    <div class="rgt" id="tbl"></div>
+  </section>
+</div>
+
+<script>
+const NATIVE=!!(window.TF_NATIVE&&window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.native);
+const native=m=>window.webkit.messageHandlers.native.postMessage(m);
+document.documentElement.classList.toggle('native',NATIVE);
+/* ---------- math helpers ---------- */
+const clamp=(v,a=-1,b=1)=>Math.max(a,Math.min(b,v));
+const mean=a=>a.reduce((s,x)=>s+x,0)/a.length;
+const sd=a=>{const m=mean(a);return Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/(a.length-1))};
+const last=a=>a[a.length-1];
+const pct=(v,d=1)=>(v>=0?'+':'')+(v*100).toFixed(d)+'%';
+const pctU=(v,d=1)=>(v*100).toFixed(d)+'%';
+const fx=(v,d=2)=>Number.isFinite(v)?v.toFixed(d):'—';
+function sma(a,n){const o=new Array(a.length).fill(null);let s=0;for(let i=0;i<a.length;i++){s+=a[i];if(i>=n)s-=a[i-n];if(i>=n-1)o[i]=s/n}return o}
+function ema(a,n){const k=2/(n+1);const o=[];let e=a[0];for(let i=0;i<a.length;i++){e=i?a[i]*k+e*(1-k):a[0];o.push(e)}return o}
+function rsi(c,n){const o=new Array(c.length).fill(null);let g=0,l=0;for(let i=1;i<c.length;i++){const d=c[i]-c[i-1];const up=Math.max(d,0),dn=Math.max(-d,0);if(i<=n){g+=up/n;l+=dn/n;if(i===n)o[i]=100-100/(1+g/(l||1e-9))}else{g=(g*(n-1)+up)/n;l=(l*(n-1)+dn)/n;o[i]=100-100/(1+g/(l||1e-9))}}return o}
+function macd(c,f=12,s=26,sg=9){const ef=ema(c,f),es=ema(c,s);const m=c.map((_,i)=>ef[i]-es[i]);const sig=ema(m,sg);return{m,sig,h:m.map((x,i)=>x-sig[i])}}
+function boll(c,n,k){const mid=sma(c,n);const up=[],lo=[];for(let i=0;i<c.length;i++){if(mid[i]==null){up.push(null);lo.push(null);continue}const w=c.slice(i-n+1,i+1);const s=Math.sqrt(w.reduce((a,x)=>a+(x-mid[i])**2,0)/n);up.push(mid[i]+k*s);lo.push(mid[i]-k*s)}return{mid,up,lo}}
+const logret=c=>c.slice(1).map((x,i)=>Math.log(x/c[i]));
+function rng(seed){return function(){seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function hash(s){let h=2166136261;for(const ch of s){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0}
+function gauss(r){let u=0,v=0;while(!u)u=r();while(!v)v=r();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+function need(s,n,what){if(s.close.length<n)throw new Error(`Needs ${n} days of data for ${what}; source has ${s.close.length}.`)}
+
+/* ---------- data sources ---------- */
+function synth(symbol,days){
+  const sym=(symbol||'DEMO').toUpperCase().trim();const r=rng(hash(sym));
+  let mu=-0.06+r()*0.42, vol=0.17+r()*0.38, p=18+r()*280;
+  const dates=[];let d=new Date(Date.UTC(2026,9,9));
+  while(dates.length<days){const wd=d.getUTCDay();if(wd&&wd<6)dates.push(d.toISOString().slice(0,10));d=new Date(d.getTime()-864e5)}
+  dates.reverse();
+  const close=[],high=[],low=[],open=[],volume=[];let nextRegime=40+Math.floor(r()*100);const base=2e6+r()*4e7;
+  for(let i=0;i<days;i++){
+    if(i===nextRegime){mu=clamp(mu+gauss(r)*0.35,-0.45,0.7);vol=clamp(vol*(0.75+r()*0.6),0.12,0.8);nextRegime+=50+Math.floor(r()*120)}
+    const z=gauss(r);let ret=(mu-vol*vol/2)/252+vol/Math.sqrt(252)*z;if(r()<0.008)ret+=gauss(r)*0.07;
+    const o=p*(1+gauss(r)*0.003);p=p*Math.exp(ret);
+    const span=Math.abs(gauss(r))*vol/Math.sqrt(252)*p*0.8;
+    open.push(o);close.push(p);high.push(Math.max(o,p)+span);low.push(Math.min(o,p)-span);
+    volume.push(Math.round(base*Math.exp(0.35*gauss(r)+9*Math.abs(ret))));
+  }
+  return{symbol:sym,dates,open,high,low,close,volume,source:'Simulated sample'};
+}
+function parseCSV(text,symbol){
+  const lines=text.trim().split(/\r?\n/).filter(l=>l.trim());if(lines.length<3)throw new Error('Paste or upload a CSV with a header row and at least a few days of prices.');
+  const split=l=>l.split(/[,;\t]/).map(x=>x.trim().replace(/^"|"$/g,''));
+  let hdr=split(lines[0]).map(h=>h.toLowerCase());let rows=lines.slice(1);
+  if(!hdr.some(h=>h.includes('close'))){hdr=['date','open','high','low','close','volume'];rows=lines}
+  const ix=n=>hdr.findIndex(h=>h===n);const ci=ix('adj close')>=0?ix('adj close'):hdr.findIndex(h=>h.includes('close'));
+  const di=hdr.findIndex(h=>h.includes('date')||h==='time');const hi=ix('high'),li=ix('low'),oi=ix('open'),vi=hdr.findIndex(h=>h.startsWith('vol'));
+  const recs=[];for(const l of rows){const c=split(l);const cl=parseFloat(c[ci]);if(!Number.isFinite(cl)||cl<=0)continue;
+    recs.push({d:c[di]||'',c:cl,h:hi>=0?parseFloat(c[hi])||cl:cl,l:li>=0?parseFloat(c[li])||cl:cl,o:oi>=0?parseFloat(c[oi])||cl:cl,v:vi>=0?parseFloat(c[vi])||0:0})}
+  if(recs.length<3)throw new Error('No usable price rows found. Expected columns like Date, Open, High, Low, Close, Volume.');
+  if(recs.length>1&&recs[0].d>recs[recs.length-1].d)recs.reverse();
+  return{symbol:(symbol||'CSV').toUpperCase(),dates:recs.map(x=>x.d),open:recs.map(x=>x.o),high:recs.map(x=>x.h),low:recs.map(x=>x.l),close:recs.map(x=>x.c),volume:recs.map(x=>x.v),source:'Your CSV'};
+}
+
+/* ---------- live prices (Mac app only: the native side does the HTTP request) ---------- */
+let LIVE={};
+const RANGE_DAYS={'1y':252,'2y':504,'5y':1260,'10y':2520,'max':1e6};
+function liveSeries(p){
+  const sym=String(p.symbol||'').trim().toUpperCase();
+  if(!sym)throw new Error('Enter a ticker symbol.');
+  if(!NATIVE)throw new Error('Live prices need the Ticker Flow Mac app. In a browser, use the sample Ticker or CSV node.');
+  const key=sym+'|'+p.range;
+  if(!LIVE[key]){
+    LIVE[key]={state:'loading'};
+    fetchLive(sym,p.range).then(s=>{LIVE[key]={state:'ok',s}},e=>{LIVE[key]={state:'error',msg:(e&&e.message)||String(e)}}).finally(()=>schedule());
+  }
+  const c=LIVE[key];
+  if(c.state==='loading'){const e=new Error(`Loading ${sym} prices…`);e.pending=true;throw e}
+  if(c.state==='error')throw new Error(c.msg);
+  return p.adjust==='raw'?c.s.raw:c.s.adj;
+}
+async function fetchLive(sym,range){
+  let lastErr='';
+  for(const host of ['query1','query2']){
+    try{
+      const url=`https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?range=${range}&interval=1d&includeAdjustedClose=true&events=div%2Csplit`;
+      const r=await native({cmd:'get',url});
+      let j=null;try{j=JSON.parse(r.text)}catch(_){}
+      if(j&&j.chart&&j.chart.error){
+        const d=String(j.chart.error.description||j.chart.error.code||'');
+        const e=new Error(/no data|delisted|not found/i.test(d)?`No price data for “${sym}”. Check the symbol (examples: BRK-B, SHOP.TO, VOD.L).`:d);e.fatal=true;throw e}
+      if(r.status!==200||!j)throw new Error(`Yahoo Finance answered ${r.status||'with an unreadable response'}.`);
+      return parseYahoo(j,sym);
+    }catch(e){if(e.fatal)throw e;lastErr=(e&&e.message)||String(e)}
+  }
+  try{
+    const ss=sym.toLowerCase().includes('.')?sym.toLowerCase():sym.toLowerCase()+'.us';
+    const r=await native({cmd:'get',url:`https://stooq.com/q/d/l/?s=${encodeURIComponent(ss)}&i=d`});
+    if(r.status===200&&/date/i.test(r.text.slice(0,40))){
+      const s=parseCSV(r.text,sym);const n=Math.min(s.close.length,RANGE_DAYS[range]||1260);const cut=k=>s[k].slice(-n);
+      const out={symbol:sym,name:sym,dates:cut('dates'),open:cut('open'),high:cut('high'),low:cut('low'),close:cut('close'),volume:cut('volume'),source:'Stooq · split-adjusted',
+        meta:{'First day':cut('dates')[0],'Last day':last(s.dates),'Last close':fx(last(s.close)),'Provider':'Stooq (Yahoo was unreachable)'}};
+      return{adj:out,raw:out};
+    }
+  }catch(_){}
+  throw new Error(`Couldn't load ${sym}. ${lastErr} Check your internet connection, then choose View › Refresh Prices.`);
+}
+function parseYahoo(j,sym){
+  const res=j.chart&&j.chart.result&&j.chart.result[0];
+  if(!res||!res.timestamp||!res.timestamp.length){const e=new Error(`No price history for “${sym}”.`);e.fatal=true;throw e}
+  const m=res.meta||{};const ind=res.indicators||{};const q=(ind.quote&&ind.quote[0])||{};
+  const ac=ind.adjclose&&ind.adjclose[0]&&ind.adjclose[0].adjclose;const off=m.gmtoffset||0;
+  const K=['dates','open','high','low','close','volume'];
+  const raw={},adj={};K.forEach(k=>{raw[k]=[];adj[k]=[]});
+  const at=(a,i)=>a&&a[i]!=null?a[i]:null;
+  res.timestamp.forEach((t,i)=>{
+    const c=at(q.close,i);if(c==null||!(c>0))return;
+    const d=new Date((t+off)*1000).toISOString().slice(0,10);
+    if(raw.dates.length&&last(raw.dates)===d)K.forEach(k=>{raw[k].pop();adj[k].pop()});
+    const o=at(q.open,i)??c,h=at(q.high,i)??Math.max(o,c),l=at(q.low,i)??Math.min(o,c),v=at(q.volume,i)??0;
+    const f=ac&&ac[i]>0?ac[i]/c:1;
+    raw.dates.push(d);raw.open.push(o);raw.high.push(h);raw.low.push(l);raw.close.push(c);raw.volume.push(v);
+    adj.dates.push(d);adj.open.push(o*f);adj.high.push(h*f);adj.low.push(l*f);adj.close.push(c*f);adj.volume.push(v);
+  });
+  if(raw.close.length<3){const e=new Error(`Too little price history for “${sym}”.`);e.fatal=true;throw e}
+  const name=m.longName||m.shortName||sym;const cur=m.currency||'';
+  const meta={'Name':name,'Exchange':m.fullExchangeName||m.exchangeName||'—','Currency':cur||'—','First day':raw.dates[0],'Last day':last(raw.dates),'Last close':fx(last(raw.close))+(cur?' '+cur:''),'Provider':'Yahoo Finance (delayed)'};
+  const base={symbol:String(m.symbol||sym).toUpperCase(),name,currency:cur,meta};
+  return{adj:{...base,...adj,source:`Yahoo Finance · ${cur?cur+' · ':''}adjusted`},raw:{...base,...raw,source:`Yahoo Finance · ${cur?cur+' · ':''}as traded`}};
+}
+
+/* ---------- backtest ---------- */
+function backtest(s,strat,p){
+  const c=s.close,n=c.length;const sig=new Array(n).fill(0);
+  if(strat==='sma'){const f=sma(c,p.fast),sl=sma(c,p.slow);for(let i=0;i<n;i++)sig[i]=f[i]!=null&&sl[i]!=null&&f[i]>sl[i]?1:0}
+  else if(strat==='macd'){const m=macd(c);for(let i=26;i<n;i++)sig[i]=m.m[i]>m.sig[i]?1:0}
+  else if(strat==='rsi'){const r=rsi(c,14);let pos=0;for(let i=0;i<n;i++){if(r[i]!=null){if(!pos&&r[i]<p.entry)pos=1;else if(pos&&r[i]>p.exit)pos=0}sig[i]=pos}}
+  else if(strat==='bb'){const b=boll(c,20,2);let pos=0;for(let i=0;i<n;i++){if(b.mid[i]!=null){if(!pos&&c[i]<b.lo[i])pos=1;else if(pos&&c[i]>b.mid[i])pos=0}sig[i]=pos}}
+  const fee=p.fee/1e4;const eq=[1],bh=[1];const rets=[];const trades=[];let open=null;
+  for(let i=1;i<n;i++){const r=c[i]/c[i-1]-1;const pos=sig[i-1];const chg=i>1?Math.abs(sig[i-1]-sig[i-2]):sig[0];
+    const sr=pos*r-chg*fee;rets.push(sr);eq.push(eq[i-1]*(1+sr));bh.push(bh[i-1]*(1+r));
+    if(chg&&sig[i-1]===1)open={i:i-1,px:c[i-1]};
+    if(chg&&sig[i-1]===0&&open){trades.push({in:open.i,out:i-1,r:c[i-1]/open.px-1});open=null}}
+  if(open)trades.push({in:open.i,out:n-1,r:c[n-1]/open.px-1,open:true});
+  const yrs=(n-1)/252;const cagr=Math.pow(last(eq),1/yrs)-1,bhc=Math.pow(last(bh),1/yrs)-1;
+  const sharpe=sd(rets)>0?mean(rets)/sd(rets)*Math.sqrt(252):0;
+  const mdd=x=>{let pk=x[0],m=0;for(const v of x){pk=Math.max(pk,v);m=Math.min(m,v/pk-1)}return m};
+  const exposure=sig.reduce((a,b)=>a+b,0)/n;const closed=trades.filter(t=>!t.open);
+  return{eq,bh,cagr,bhc,sharpe,mdd:mdd(eq),bhmdd:mdd(bh),trades,win:closed.length?closed.filter(t=>t.r>0).length/closed.length:NaN,exposure};
+}
+
+/* ---------- node library ---------- */
+const CATS={source:{label:'Data sources',color:'--c-source',tag:'SRC'},criteria:{label:'Research criteria',color:'--c-criteria',tag:'CR'},test:{label:'Statistical tests',color:'--c-test',tag:'T'},logic:{label:'Logic',color:'--c-logic',tag:'∧'},output:{label:'Output',color:'--c-output',tag:'≡'}};
+const W={k:'weight',label:'Weight in verdict',type:'number',def:1,min:0,max:5,step:0.5,help:'0 keeps the check visible without scoring it.'};
+const T={
+ live:{cat:'source',title:'Live ticker',desc:'Daily prices from Yahoo Finance, fetched by the Mac app (delayed 15 minutes or more). Adjusted prices fold in splits and dividends, which is what most tests should use.',
+  params:[{k:'symbol',label:'Symbol',type:'text',def:'NVDA',help:'Press Return to load. US tickers as-is (AAPL, BRK-B); other markets use Yahoo suffixes such as SHOP.TO, VOD.L, 7203.T.'},
+   {k:'range',label:'History',type:'select',def:'5y',options:[['1y','1 year'],['2y','2 years'],['5y','5 years'],['10y','10 years'],['max','All available']]},
+   {k:'adjust',label:'Prices',type:'select',def:'adj',options:[['adj','Adjusted for splits & dividends'],['raw','As traded']]}],
+  sum:p=>`${String(p.symbol).toUpperCase()} · ${p.range} · live`,src:p=>liveSeries(p)},
+ ticker:{cat:'source',title:'Sample ticker (simulated)',desc:'Generates a realistic, repeatable price history for any symbol so you can build and try workflows. Prices are simulated, not market quotes. For real prices, use the CSV node.',
+  params:[{k:'symbol',label:'Symbol',type:'text',def:'NVDA'},{k:'days',label:'History (trading days)',type:'number',def:756,min:120,max:2520,help:'252 trading days ≈ 1 year.'}],
+  sum:p=>`${p.symbol.toUpperCase()} · ${p.days}d simulated`,src:p=>synth(p.symbol,Math.round(p.days))},
+ csv:{cat:'source',title:'CSV prices',desc:'Load real daily prices. Export a CSV from Yahoo Finance, Stooq, your broker or a spreadsheet; columns Date, Open, High, Low, Close (or Adj Close), Volume.',
+  params:[{k:'symbol',label:'Label',type:'text',def:'MY STOCK'},{k:'csv',label:'CSV data',type:'csv',def:''}],
+  sum:p=>p.csv?`${p.symbol} · ${p.csv.trim().split(/\n/).length-1} rows`:'No data yet',src:p=>parseCSV(p.csv,p.symbol)},
+
+ trend:{cat:'criteria',title:'Moving-average trend',desc:'Classic trend filter: is the fast average above the slow one (a “golden cross” regime)? Score scales with the gap between them.',
+  params:[{k:'fast',label:'Fast MA (days)',type:'number',def:50,min:5,max:200},{k:'slow',label:'Slow MA (days)',type:'number',def:200,min:20,max:400},W],
+  sum:p=>`SMA ${p.fast} vs ${p.slow}`,
+  run(s,p){need(s,p.slow,'the slow MA');const f=last(sma(s.close,p.fast)),sl=last(sma(s.close,p.slow));const gap=f/sl-1;const px=last(s.close);
+   return{pass:gap>0,score:clamp(gap*8),value:`gap ${pct(gap)}`,detail:`Fast ${fx(f)} vs slow ${fx(sl)}. Price is ${pct(px/sl-1)} from the slow MA.`,kv:{'Fast MA':fx(f),'Slow MA':fx(sl),'Gap':pct(gap),'Price vs slow':pct(px/sl-1)}}}},
+ rsi:{cat:'criteria',title:'RSI',desc:'Relative Strength Index. Below the oversold line scores bullish (potential bounce), above overbought scores bearish. Choose “momentum” to read high RSI as strength instead.',
+  params:[{k:'period',label:'Period',type:'number',def:14,min:2,max:50},{k:'lo',label:'Oversold below',type:'number',def:30,min:5,max:50},{k:'hi',label:'Overbought above',type:'number',def:70,min:50,max:95},{k:'mode',label:'Reading',type:'select',def:'reversion',options:[['reversion','Mean reversion'],['momentum','Momentum']]},W],
+  sum:p=>`RSI(${p.period}) ${p.lo}/${p.hi} · ${p.mode}`,
+  run(s,p){need(s,p.period+2,'RSI');const v=last(rsi(s.close,p.period));const mid=(p.lo+p.hi)/2;let sc=clamp((mid-v)/((p.hi-p.lo)/2));if(p.mode==='momentum')sc=-sc;
+   const zone=v<p.lo?'oversold':v>p.hi?'overbought':'neutral';const pass=p.mode==='momentum'?v>50&&v<p.hi+10:v<p.hi;
+   return{pass,score:sc,value:`RSI ${fx(v,1)} · ${zone}`,detail:`Read as ${p.mode==='momentum'?'momentum (strength is good)':'mean reversion (stretched is risky)'}.`,kv:{'RSI':fx(v,1),'Zone':zone}}}},
+ macd:{cat:'criteria',title:'MACD',desc:'12/26/9 MACD. Passes when MACD is above its signal line; scores extra if the cross happened recently.',
+  params:[{k:'recent',label:'“Recent cross” window (days)',type:'number',def:10,min:1,max:60},W],sum:p=>`12/26/9 · cross ≤${p.recent}d`,
+  run(s,p){need(s,40,'MACD');const m=macd(s.close);const h=m.h;const n=h.length;let ago=null;for(let i=n-1;i>0&&n-1-i<120;i--){if(Math.sign(h[i])!==Math.sign(h[i-1])){ago=n-1-i;break}}
+   const bull=h[n-1]>0;const fresh=ago!=null&&ago<=p.recent;const sc=clamp((bull?0.5:-0.5)+(fresh?(bull?0.5:-0.5):0));
+   return{pass:bull,score:sc,value:`${bull?'above':'below'} signal${ago!=null?` · crossed ${ago}d ago`:''}`,detail:`Histogram ${fx(h[n-1],3)}.`,kv:{'MACD':fx(m.m[n-1],3),'Signal':fx(m.sig[n-1],3),'Histogram':fx(h[n-1],3),'Last cross':ago!=null?ago+' days ago':'>120 days'}}}},
+ boll:{cat:'criteria',title:'Bollinger position',desc:'Where price sits inside its Bollinger Bands (%B). Near the lower band scores bullish for reversion setups; near the upper band bearish.',
+  params:[{k:'n',label:'Period',type:'number',def:20,min:5,max:100},{k:'k',label:'Band width (σ)',type:'number',def:2,min:1,max:4,step:0.5},W],sum:p=>`BB(${p.n}, ${p.k}σ)`,
+  run(s,p){need(s,p.n,'Bollinger Bands');const b=boll(s.close,p.n,p.k);const i=s.close.length-1;const pb=(s.close[i]-b.lo[i])/(b.up[i]-b.lo[i]);const bw=(b.up[i]-b.lo[i])/b.mid[i];
+   return{pass:pb<0.8,score:clamp((0.5-pb)*2),value:`%B ${fx(pb,2)}`,detail:`Band width ${pctU(bw)} of price.`,kv:{'%B':fx(pb,2),'Upper':fx(b.up[i]),'Middle':fx(b.mid[i]),'Lower':fx(b.lo[i]),'Band width':pctU(bw)}}}},
+ mom:{cat:'criteria',title:'Price momentum',desc:'Total return over a lookback, optionally skipping the most recent month (the 12-1 momentum used in academic factor research).',
+  params:[{k:'look',label:'Lookback (days)',type:'number',def:252,min:20,max:756},{k:'skip',label:'Skip recent (days)',type:'number',def:21,min:0,max:63},{k:'min',label:'Pass above return (%)',type:'number',def:10,min:-50,max:200},W],
+  sum:p=>`${p.look}d return, skip ${p.skip}d > ${p.min}%`,
+  run(s,p){need(s,p.look+1,'momentum');const c=s.close,n=c.length;const r=c[n-1-p.skip]/c[n-1-p.look]-1;
+   return{pass:r*100>p.min,score:clamp(r/0.4),value:pct(r),detail:`Return from ${s.dates[n-1-p.look]} to ${s.dates[n-1-p.skip]}.`,kv:{'Return':pct(r),'Threshold':p.min+'%'}}}},
+ high52:{cat:'criteria',title:'Near 52-week high',desc:'Stocks trading close to their 52-week high tend to keep leading. Passes when price is within the set distance of the high.',
+  params:[{k:'within',label:'Within (% of high)',type:'number',def:10,min:1,max:50},W],sum:p=>`within ${p.within}% of 52w high`,
+  run(s,p){const n=s.close.length;const w=Math.min(252,n);const hi=Math.max(...s.high.slice(n-w)),lo=Math.min(...s.low.slice(n-w));const d=last(s.close)/hi-1;
+   return{pass:-d*100<=p.within,score:clamp(1+d/(p.within/100)*1),value:`${pct(d)} from high`,detail:`52-week range ${fx(lo)} – ${fx(hi)}.`,kv:{'52w high':fx(hi),'52w low':fx(lo),'From high':pct(d),'Range position':pctU((last(s.close)-lo)/(hi-lo),0)}}}},
+ vol:{cat:'criteria',title:'Volatility cap',desc:'Annualized volatility of daily returns over a window. Use it to keep wild names out of a portfolio.',
+  params:[{k:'look',label:'Window (days)',type:'number',def:63,min:10,max:504},{k:'max',label:'Max annual vol (%)',type:'number',def:45,min:5,max:200},W],sum:p=>`σ(${p.look}d) < ${p.max}%`,
+  run(s,p){need(s,p.look+1,'volatility');const r=logret(s.close.slice(-p.look-1));const v=sd(r)*Math.sqrt(252);
+   return{pass:v*100<p.max,score:clamp((p.max/100-v)/(p.max/100)*1.5),value:`σ ${pctU(v)}`,detail:`Daily σ ${pctU(sd(r),2)}.`,kv:{'Annual vol':pctU(v),'Cap':p.max+'%'}}}},
+ dd:{cat:'criteria',title:'Drawdown limit',desc:'Worst peak-to-trough fall within the window. Passes if it stayed shallower than your limit.',
+  params:[{k:'look',label:'Window (days)',type:'number',def:252,min:20,max:2520},{k:'max',label:'Max drawdown (%)',type:'number',def:30,min:5,max:90},W],sum:p=>`max DD(${p.look}d) < ${p.max}%`,
+  run(s,p){const c=s.close.slice(-p.look);let pk=c[0],m=0,cur=0;for(const v of c){pk=Math.max(pk,v);m=Math.min(m,v/pk-1)}cur=last(c)/Math.max(...c)-1;
+   return{pass:-m*100<p.max,score:clamp((p.max/100+m)/(p.max/100)),value:`max ${pct(m)}`,detail:`Currently ${pct(cur)} below the window peak.`,kv:{'Max drawdown':pct(m),'Current drawdown':pct(cur),'Limit':'-'+p.max+'%'}}}},
+ volume:{cat:'criteria',title:'Volume confirmation',desc:'Is recent trading volume rising versus its longer average, and on up days more than down days? Rising participation backs a move.',
+  params:[{k:'short',label:'Recent window (days)',type:'number',def:20,min:5,max:60},{k:'long',label:'Base window (days)',type:'number',def:60,min:20,max:252},W],sum:p=>`vol ${p.short}d vs ${p.long}d`,
+  run(s,p){need(s,p.long+1,'volume');if(!s.volume.some(v=>v>0))throw new Error('This source has no volume column.');const v=s.volume,n=v.length;const a=mean(v.slice(n-p.short)),b=mean(v.slice(n-p.long));const ratio=a/b;
+   let up=0,dn=0;for(let i=n-p.short;i<n;i++){if(s.close[i]>s.close[i-1])up+=v[i];else dn+=v[i]}const ud=up/(dn||1);
+   return{pass:ratio>1&&ud>1,score:clamp((ratio-1)*1.5+(ud-1)*0.5),value:`×${fx(ratio)} · up/down ${fx(ud)}`,detail:`Average ${Math.round(a).toLocaleString()} vs ${Math.round(b).toLocaleString()} shares.`,kv:{'Volume ratio':'×'+fx(ratio),'Up/down volume':fx(ud)}}}},
+ fund:{cat:'criteria',title:'Fundamentals screen',desc:'Enter figures from the latest filing or a screener. Each passing metric adds to the score.',
+  params:[{k:'pe',label:'P/E (trailing)',type:'number',def:32},{k:'maxpe',label:'Max P/E',type:'number',def:35},{k:'peg',label:'PEG',type:'number',def:1.4,step:0.1},{k:'maxpeg',label:'Max PEG',type:'number',def:2,step:0.1},{k:'de',label:'Debt / equity',type:'number',def:0.4,step:0.1},{k:'maxde',label:'Max debt / equity',type:'number',def:1.5,step:0.1},{k:'roe',label:'ROE (%)',type:'number',def:24},{k:'minroe',label:'Min ROE (%)',type:'number',def:12},{k:'fcf',label:'FCF margin (%)',type:'number',def:18},{k:'minfcf',label:'Min FCF margin (%)',type:'number',def:5},W],
+  sum:p=>`P/E ${p.pe} · PEG ${p.peg} · ROE ${p.roe}%`,
+  run(s,p){const ck=[['P/E',p.pe>0&&p.pe<=p.maxpe,p.pe],['PEG',p.peg>0&&p.peg<=p.maxpeg,p.peg],['Debt/equity',p.de<=p.maxde,p.de],['ROE',p.roe>=p.minroe,p.roe+'%'],['FCF margin',p.fcf>=p.minfcf,p.fcf+'%']];const k=ck.filter(c=>c[1]).length;
+   const kv={};ck.forEach(c=>kv[c[0]]=`${c[2]} ${c[1]?'✓':'✗'}`);return{pass:k>=4,score:k/ck.length*2-1,value:`${k}/${ck.length} metrics pass`,detail:'Figures entered by you; not fetched.',kv}}},
+
+ backtest:{cat:'test',title:'Strategy backtest',desc:'Simulates a long-only rule over the full history (trades next bar, fees per switch) and compares it with buy-and-hold. Passes when the rule beats buy-and-hold on Sharpe and clears your minimum.',
+  params:[{k:'strat',label:'Rule',type:'select',def:'sma',options:[['sma','Moving-average crossover'],['macd','MACD crossover'],['rsi','RSI dip-buying'],['bb','Bollinger reversion']]},{k:'fast',label:'Fast MA (crossover)',type:'number',def:50,min:5,max:200},{k:'slow',label:'Slow MA (crossover)',type:'number',def:200,min:20,max:400},{k:'entry',label:'RSI buy below',type:'number',def:30,min:5,max:50},{k:'exit',label:'RSI sell above',type:'number',def:55,min:40,max:90},{k:'fee',label:'Cost per trade (bps)',type:'number',def:5,min:0,max:100},{k:'minsharpe',label:'Min Sharpe',type:'number',def:0.5,step:0.1},W],
+  sum:p=>({sma:`SMA ${p.fast}/${p.slow} cross`,macd:'MACD cross',rsi:`RSI <${p.entry} → >${p.exit}`,bb:'Bollinger reversion'})[p.strat]+` · ${p.fee}bps`,
+  run(s,p){need(s,Math.max(p.strat==='sma'?p.slow+20:60,120),'a backtest');const b=backtest(s,p.strat,p);
+   const bhs=(()=>{const r=logret(s.close);return mean(r)/sd(r)*Math.sqrt(252)})();
+   return{pass:b.sharpe>=p.minsharpe&&b.sharpe>bhs,score:clamp((b.sharpe-bhs)/1),value:`CAGR ${pct(b.cagr)} vs ${pct(b.bhc)}`,detail:`Sharpe ${fx(b.sharpe)} vs buy-and-hold ${fx(bhs)}. Past results on one history; prone to overfitting.`,bt:b,
+    kv:{'Strategy CAGR':pct(b.cagr),'Buy & hold CAGR':pct(b.bhc),'Strategy Sharpe':fx(b.sharpe),'Buy & hold Sharpe':fx(bhs),'Max drawdown':pct(b.mdd),'B&H drawdown':pct(b.bhmdd),'Trades':b.trades.length,'Win rate':Number.isFinite(b.win)?pctU(b.win,0):'—','Time in market':pctU(b.exposure,0)}}}},
+ sharpe:{cat:'test',title:'Sharpe significance',desc:'Is the average return distinguishable from zero? Computes annualized Sharpe and its t-statistic (Sharpe × √years). |t| above 2 is roughly 95% confidence.',
+  params:[{k:'look',label:'Window (days)',type:'number',def:756,min:60,max:2520},{k:'rf',label:'Risk-free rate (% / yr)',type:'number',def:4,step:0.25},{k:'mint',label:'Pass if t above',type:'number',def:2,step:0.1},W],sum:p=>`${p.look}d · rf ${p.rf}% · t>${p.mint}`,
+  run(s,p){const c=s.close.slice(-p.look-1);const r=logret(c).map(x=>x-p.rf/100/252);const sh=mean(r)/sd(r)*Math.sqrt(252);const yrs=r.length/252;const t=sh*Math.sqrt(yrs);
+   return{pass:t>p.mint,score:clamp(t/3),value:`Sharpe ${fx(sh)} · t ${fx(t)}`,detail:`${fx(yrs,1)} years of excess returns.`,kv:{'Sharpe (ann.)':fx(sh),'t-stat':fx(t),'Years':fx(yrs,1),'Ann. excess return':pct(mean(r)*252)}}}},
+ regress:{cat:'test',title:'Trend regression',desc:'Fits a straight line to log price. Slope gives the trend’s annual rate; R² says how cleanly price follows it (1 = perfectly straight).',
+  params:[{k:'look',label:'Window (days)',type:'number',def:126,min:20,max:756},{k:'minr2',label:'Min R²',type:'number',def:0.5,step:0.05,min:0,max:1},W],sum:p=>`${p.look}d · R² > ${p.minr2}`,
+  run(s,p){need(s,p.look,'the regression');const y=s.close.slice(-p.look).map(Math.log);const x=y.map((_,i)=>i);const mx=mean(x),my=mean(y);let sxy=0,sxx=0,syy=0;x.forEach((xi,i)=>{sxy+=(xi-mx)*(y[i]-my);sxx+=(xi-mx)**2;syy+=(y[i]-my)**2});
+   const b=sxy/sxx;const r2=sxy*sxy/(sxx*syy);const ann=Math.exp(b*252)-1;
+   return{pass:b>0&&r2>=p.minr2,score:clamp(Math.sign(b)*r2*Math.min(1,Math.abs(ann)/0.3)*1.4),value:`${pct(ann)}/yr · R² ${fx(r2)}`,detail:'Slope significance is overstated by autocorrelation, so judge by R² and rate.',kv:{'Annualized slope':pct(ann),'R²':fx(r2),'Window':p.look+' days'}}}},
+ hurst:{cat:'test',title:'Hurst exponent',desc:'Rescaled-range estimate of persistence. H > 0.55 suggests trending behavior, H < 0.45 mean reversion, around 0.5 a random walk. Tells you which kind of strategy suits the stock.',
+  params:[{k:'look',label:'Window (days)',type:'number',def:504,min:128,max:2520},{k:'want',label:'Looking for',type:'select',def:'trend',options:[['trend','Trending'],['revert','Mean reverting']]},W],sum:p=>`${p.look}d · want ${p.want==='trend'?'H>0.55':'H<0.45'}`,
+  run(s,p){need(s,p.look+1,'Hurst');const r=logret(s.close.slice(-p.look-1));const xs=[],ys=[];
+   for(let w=8;w<=r.length/2;w*=2){const rs=[];for(let st=0;st+w<=r.length;st+=w){const seg=r.slice(st,st+w);const m=mean(seg);let cum=0,mx=-1e9,mn=1e9;for(const v of seg){cum+=v-m;mx=Math.max(mx,cum);mn=Math.min(mn,cum)}const sdv=Math.sqrt(seg.reduce((a,v)=>a+(v-m)**2,0)/w);if(sdv>0)rs.push((mx-mn)/sdv)}xs.push(Math.log(w));ys.push(Math.log(mean(rs)))}
+   const mx=mean(xs),my=mean(ys);let a=0,b=0;xs.forEach((x,i)=>{a+=(x-mx)*(ys[i]-my);b+=(x-mx)**2});const H=a/b;
+   const kind=H>0.55?'trending':H<0.45?'mean reverting':'random walk';const pass=p.want==='trend'?H>0.55:H<0.45;
+   return{pass,score:clamp((p.want==='trend'?H-0.5:0.5-H)*8),value:`H ${fx(H,3)} · ${kind}`,detail:'R/S estimates carry a small-sample bias upward; treat 0.5–0.55 as noise.',kv:{'Hurst H':fx(H,3),'Behavior':kind,'Scales used':xs.length}}}},
+ normal:{cat:'test',title:'Tail-risk (Jarque–Bera)',desc:'Tests whether daily returns are normally distributed. Fat tails (high kurtosis) mean big moves happen more often than a bell curve predicts, so volatility understates risk. Informational: passes when tails look normal.',
+  params:[{k:'look',label:'Window (days)',type:'number',def:504,min:60,max:2520},{k:'alpha',label:'Significance level',type:'number',def:0.05,step:0.01,min:0.001,max:0.2},W],sum:p=>`${p.look}d · α ${p.alpha}`,
+  run(s,p){const r=logret(s.close.slice(-p.look-1));const n=r.length,m=mean(r);const m2=r.reduce((a,x)=>a+(x-m)**2,0)/n,m3=r.reduce((a,x)=>a+(x-m)**3,0)/n,m4=r.reduce((a,x)=>a+(x-m)**4,0)/n;
+   const S=m3/m2**1.5,K=m4/m2**2;const jb=n/6*(S*S+(K-3)**2/4);const pv=Math.exp(-jb/2);
+   return{pass:pv>p.alpha,score:clamp(-(K-3)/6-Math.max(0,-S)/2,-1,0.3),value:`kurt ${fx(K)} · p ${pv<1e-4?'<0.0001':fx(pv,4)}`,detail:S<0?'Negative skew: crashes larger than rallies.':'Skew is non-negative.',kv:{'Skewness':fx(S,3),'Kurtosis (normal = 3)':fx(K,2),'JB statistic':fx(jb,1),'p-value':pv<1e-4?'<0.0001':fx(pv,4)}}}},
+ mc:{cat:'test',title:'Monte Carlo risk',desc:'Bootstraps historical daily returns into thousands of future paths to estimate Value-at-Risk, expected shortfall and the chance of a loss over your horizon.',
+  params:[{k:'h',label:'Horizon (trading days)',type:'number',def:21,min:1,max:252},{k:'sims',label:'Simulations',type:'number',def:4000,min:500,max:20000,step:500},{k:'conf',label:'Confidence (%)',type:'number',def:95,min:80,max:99.5,step:0.5},{k:'maxvar',label:'Max acceptable VaR (%)',type:'number',def:15,min:1,max:80},W],
+  sum:p=>`${p.sims} paths · ${p.h}d · VaR${p.conf}`,
+  run(s,p){const r=logret(s.close.slice(-757));const g=rng(hash(s.symbol+p.h));const out=[];for(let k=0;k<p.sims;k++){let a=0;for(let j=0;j<p.h;j++)a+=r[Math.floor(g()*r.length)];out.push(Math.exp(a)-1)}
+   out.sort((a,b)=>a-b);const q=Math.floor((1-p.conf/100)*out.length);const VaR=out[q];const cvar=mean(out.slice(0,Math.max(1,q)));const pl=out.filter(x=>x<0).length/out.length;const med=out[Math.floor(out.length/2)];
+   return{pass:-VaR*100<p.maxvar,score:clamp((p.maxvar/100+VaR)/(p.maxvar/100)),value:`VaR ${pct(VaR)} · P(loss) ${pctU(pl,0)}`,detail:`Median outcome ${pct(med)} over ${p.h} days.`,mcDist:out,kv:{[`VaR ${p.conf}%`]:pct(VaR),'Expected shortfall':pct(cvar),'Median outcome':pct(med),'Best 5%':pct(out[Math.floor(out.length*0.95)]),'Chance of loss':pctU(pl,0)}}}},
+
+ gate:{cat:'logic',title:'Gate',desc:'Combines every check wired into it. Downstream, the verdict is forced to “Avoid” when the gate fails, which lets you set must-pass conditions.',
+  params:[{k:'mode',label:'Pass when',type:'select',def:'all',options:[['all','All checks pass'],['any','Any check passes'],['majority','Most checks pass'],['score','Average score above']]},{k:'min',label:'Score threshold',type:'number',def:0.2,step:0.05,min:-1,max:1,help:'Used by “Average score above”.'}],
+  sum:p=>({all:'ALL must pass',any:'ANY passes',majority:'MAJORITY pass',score:`avg score > ${p.min}`})[p.mode]},
+ verdict:{cat:'output',title:'Verdict',desc:'Weighted average of every score that reaches it, on a −1 to +1 scale, plus a pass count. Click it to see the full report below.',
+  params:[{k:'buy',label:'Bullish above',type:'number',def:0.25,step:0.05,min:0,max:1},{k:'sell',label:'Bearish below',type:'number',def:-0.25,step:0.05,min:-1,max:0}],sum:p=>`bullish > ${p.buy} · bearish < ${p.sell}`},
+};
+
+/* ---------- state ---------- */
+let S={nodes:[],edges:[],sel:null,selEdge:null,pan:{x:40,y:40},zoom:1};let R={};let uid=1;
+const nid=()=>'n'+(uid++);
+function mk(type,x,y,over={}){const t=T[type];const params={};t.params.forEach(q=>params[q.k]=q.def);Object.assign(params,over);const n={id:nid(),type,x,y,params};S.nodes.push(n);return n}
+function link(a,b){S.edges.push({from:a.id,to:b.id})}
+const SRC=NATIVE?'live':'ticker';
+const TEMPLATES={
+ trend(){const s=mk(SRC,0,140);const a=mk('trend',300,0),b=mk('mom',300,110),c=mk('high52',300,220),d=mk('regress',300,330);const bt=mk('backtest',300,440);const v=mk('verdict',620,220);[a,b,c,d,bt].forEach(n=>{link(s,n);link(n,v)});return v},
+ revert(){const s=mk(SRC,0,140,{symbol:'KO'});const a=mk('rsi',300,0),b=mk('boll',300,110),c=mk('hurst',300,220,{want:'revert'}),bt=mk('backtest',300,330,{strat:'rsi'}),dd=mk('dd',300,440);const v=mk('verdict',620,220);[a,b,c,bt,dd].forEach(n=>{link(s,n);link(n,v)});return v},
+ risk(){const s=mk(SRC,0,170,{symbol:'TSLA'});const a=mk('vol',300,0),b=mk('dd',300,110),c=mk('normal',300,220),d=mk('mc',300,330),e=mk('sharpe',300,440);const g=mk('gate',600,60,{mode:'all'});const v=mk('verdict',880,200);[a,b].forEach(n=>{link(s,n);link(n,g)});link(g,v);[c,d,e].forEach(n=>{link(s,n);link(n,v)});return v},
+ quality(){const s=mk(SRC,0,170,{symbol:'MSFT'});const f=mk('fund',300,0,{weight:2});const m=mk('mom',300,110),t=mk('trend',300,220),vo=mk('volume',300,330),sh=mk('sharpe',300,440);const g=mk('gate',600,40,{mode:'all'});const v=mk('verdict',880,200);link(s,f);link(f,g);link(g,v);[m,t,vo,sh].forEach(n=>{link(s,n);link(n,v)});return v},
+ blank(){const s=mk(SRC,0,100);const v=mk('verdict',420,100);return v}
+};
+function loadTemplate(k){S.nodes=[];S.edges=[];uid=1;const v=TEMPLATES[k]();S.sel=v.id;S.selEdge=null;baseline=sig();renderAll();fit();schedule()}
+
+/* ---------- engine ---------- */
+function run(){
+  R={};const inc=id=>S.edges.filter(e=>e.to===id).map(e=>e.from);const memo={};
+  const ev=(id,stack=new Set())=>{if(memo[id])return memo[id];if(stack.has(id))return{error:'Cycle detected'};stack.add(id);
+    const n=S.nodes.find(x=>x.id===id);const t=T[n.type];let out;
+    try{
+      if(t.cat==='source'){const s=t.src(n.params);out={ctx:{series:s,results:[]},res:{pass:null,value:`${s.close.length} days · last ${fx(last(s.close))}`,kv:Object.assign({'Trading days':s.close.length},s.meta||{'First day':s.dates[0],'Last day':last(s.dates),'Last close':fx(last(s.close))})}}}
+      else{const insAll=inc(id).map(i=>ev(i,new Set(stack)));const ins=insAll.filter(x=>x.ctx);
+        if(!ins.length){const pend=insAll.find(x=>x.pending);if(pend){const e=new Error('Waiting for prices…');e.pending=true;throw e}
+          if(insAll.length&&t.cat!=='output'&&t.cat!=='logic')throw new Error('The input has a problem: '+insAll[0].error);
+          throw new Error(t.cat==='output'||t.cat==='logic'?'Wire checks into this node.':'Connect a data source to the input.')}
+        const skipped=insAll.filter(x=>x.error&&!x.pending).length,waiting=insAll.filter(x=>x.pending).length;
+        const series=ins[0].ctx.series;const seen=new Set();const results=[];ins.forEach(x=>x.ctx.results.forEach(r=>{if(!seen.has(r.id)){seen.add(r.id);results.push(r)}}));
+        if(t.cat==='criteria'||t.cat==='test'){const r=t.run(series,n.params);const rec={...r,id,type:n.type,title:t.title,weight:n.params.weight};out={ctx:{series,results:[...results,rec]},res:rec}}
+        else if(t.cat==='logic'){const own=results.filter(r=>r.pass!=null);if(!own.length)throw new Error('No checks reach this gate.');const k=own.filter(r=>r.pass).length;const avg=mean(own.map(r=>r.score));
+          const p=n.params;const pass=p.mode==='all'?k===own.length:p.mode==='any'?k>0:p.mode==='majority'?k>own.length/2:avg>p.min;
+          const rec={id,type:'gate',title:'Gate',pass,score:null,gate:true,value:`${k}/${own.length} pass · avg ${fx(avg)}`,detail:T.gate.sum(p),kv:{'Checks passing':`${k} of ${own.length}`,'Average score':fx(avg),'Rule':T.gate.sum(p)}};
+          out={ctx:{series,results:[...results.map(r=>({...r,gated:id})),rec]},res:rec}}
+        else{const sc=results.filter(r=>r.score!=null&&r.weight>0);const ws=sc.reduce((a,r)=>a+r.weight,0);const score=ws?sc.reduce((a,r)=>a+r.score*r.weight,0)/ws:0;
+          const gates=results.filter(r=>r.gate);const gateFail=gates.some(g=>!g.pass);const checks=results.filter(r=>r.pass!=null&&!r.gate);const k=checks.filter(r=>r.pass).length;
+          let label=score>n.params.buy?'Bullish':score<n.params.sell?'Bearish':'Neutral';if(gateFail)label='Avoid';
+          const rec={id,verdict:true,score,label,gateFail,k,total:checks.length,skipped,waiting,value:`${label} · ${score>=0?'+':''}${fx(score)}`,pass:label==='Bullish'?true:label==='Neutral'?null:false};
+          out={ctx:{series,results},res:rec}}}
+    }catch(e){out={error:e.message,pending:!!e.pending}}
+    memo[id]=out;return out};
+  S.nodes.forEach(n=>R[n.id]=ev(n.id));
+}
+let tmr;function schedule(){clearTimeout(tmr);tmr=setTimeout(()=>{run();paintStatus();renderOutputOnly();renderReport();save()},120)}
+
+/* ---------- canvas render ---------- */
+const $=s=>document.querySelector(s);const cv=$('#cv'),world=$('#world'),nodesEl=$('#nodes'),wires=$('#wires');
+const NW=224,PY=22;
+function applyView(){world.style.transform=`translate(${S.pan.x}px,${S.pan.y}px) scale(${S.zoom})`;const g=$('#gridbg');const sz=22*S.zoom;g.style.backgroundSize=`${sz}px ${sz}px`;g.style.backgroundPosition=`${S.pan.x}px ${S.pan.y}px`}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c])}
+function renderNodes(){nodesEl.innerHTML='';S.nodes.forEach(n=>{const t=T[n.type],c=CATS[t.cat];const el=document.createElement('div');el.className='node'+(S.sel===n.id?' sel':'');el.dataset.id=n.id;el.style.left=n.x+'px';el.style.top=n.y+'px';
+  el.innerHTML=`<div class="hd"><span class="tag" style="background:var(${c.color})">${c.tag}</span><span class="nm">${esc(t.title)}</span><button class="x" title="Delete node" aria-label="Delete ${esc(t.title)}">×</button></div>
+  <div class="bd"><div class="sum">${esc(t.sum(n.params))}</div><div class="st"></div></div>${t.cat!=='source'?'<span class="port in" data-port="in"></span>':''}${t.cat!=='output'?'<span class="port out" data-port="out"></span>':''}`;
+  nodesEl.appendChild(el)});paintStatus()}
+function paintStatus(){S.nodes.forEach(n=>{const el=nodesEl.querySelector(`[data-id="${n.id}"] .st`);if(!el)return;const r=R[n.id];if(!r){el.innerHTML='';return}
+  if(r.error){el.innerHTML=r.pending?`<span class="chip info">Loading</span><span class="v">${esc(r.error)}</span>`:`<span class="chip err">Error</span><span class="v">${esc(r.error)}</span>`;return}
+  const res=r.res;let chip=res.pass===true?'<span class="chip pass">Pass</span>':res.pass===false?'<span class="chip fail">'+(res.verdict?esc(res.label):'Fail')+'</span>':'<span class="chip info">'+(res.verdict?esc(res.label):'Data')+'</span>';
+  if(res.verdict&&res.pass===true)chip='<span class="chip pass">Bullish</span>';
+  el.innerHTML=chip+`<span class="v">${esc(res.verdict?(res.score>=0?'+':'')+fx(res.score)+' · '+res.k+'/'+res.total+' pass':res.value)}</span>`})}
+function portPos(n,side){return side==='out'?{x:n.x+NW,y:n.y+PY}:{x:n.x,y:n.y+PY}}
+function path(a,b){const dx=Math.max(50,Math.abs(b.x-a.x)/2);return`M${a.x} ${a.y} C${a.x+dx} ${a.y},${b.x-dx} ${b.y},${b.x} ${b.y}`}
+let temp=null;
+function renderWires(){let h='';S.edges.forEach((e,i)=>{const a=S.nodes.find(n=>n.id===e.from),b=S.nodes.find(n=>n.id===e.to);if(!a||!b)return;const p=path(portPos(a,'out'),portPos(b,'in'));const sel=S.selEdge===i;
+  h+=`<path class="wire${sel?' sel':''}" d="${p}"/><path class="wire hit" data-edge="${i}" d="${p}"/>`;
+  if(sel){const A=portPos(a,'out'),B=portPos(b,'in');const mx=(A.x+B.x)/2,my=(A.y+B.y)/2;h+=`<g class="wdel" data-del="${i}" transform="translate(${mx} ${my})"><circle r="10"/><path d="M-4 -4 L4 4 M4 -4 L-4 4"/></g>`}});
+  if(temp)h+=`<path class="wire temp" d="${path(temp.a,temp.b)}"/>`;wires.innerHTML=h}
+function renderAll(){renderNodes();renderWires();applyView();renderInspector();renderReport()}
+
+/* ---------- interactions ---------- */
+const toWorld=(cx,cy)=>{const r=cv.getBoundingClientRect();return{x:(cx-r.left-S.pan.x)/S.zoom,y:(cy-r.top-S.pan.y)/S.zoom}};
+let drag=null;
+cv.addEventListener('pointerdown',e=>{
+  const del=e.target.closest('[data-del]');if(del){S.edges.splice(+del.dataset.del,1);S.selEdge=null;renderWires();schedule();return}
+  const hit=e.target.closest('[data-edge]');if(hit){S.selEdge=+hit.dataset.edge;S.sel=null;renderNodes();renderWires();renderInspector();return}
+  const nodeEl=e.target.closest('.node');
+  if(e.target.classList.contains('x')&&nodeEl){const id=nodeEl.dataset.id;removeNode(id);return}
+  if(e.target.dataset.port==='out'){const n=S.nodes.find(x=>x.id===nodeEl.dataset.id);temp={from:n.id,a:portPos(n,'out'),b:toWorld(e.clientX,e.clientY)};drag={kind:'wire'};cv.setPointerCapture(e.pointerId);renderWires();return}
+  if(e.target.dataset.port==='in'){const id=nodeEl.dataset.id;const i=S.edges.findIndex(x=>x.to===id);if(i>=0){const ed=S.edges.splice(i,1)[0];const n=S.nodes.find(x=>x.id===ed.from);temp={from:n.id,a:portPos(n,'out'),b:toWorld(e.clientX,e.clientY)};drag={kind:'wire'};cv.setPointerCapture(e.pointerId);renderWires();schedule()}return}
+  if(nodeEl){const id=nodeEl.dataset.id;if(S.sel!==id||S.selEdge!=null){S.sel=id;S.selEdge=null;nodesEl.querySelectorAll('.node').forEach(x=>x.classList.toggle('sel',x.dataset.id===id));renderWires();renderInspector();renderReport()}
+    if(e.target.closest('.hd')||e.target.closest('.bd')){const n=S.nodes.find(x=>x.id===id);const w=toWorld(e.clientX,e.clientY);drag={kind:'node',n,el:nodeEl,dx:w.x-n.x,dy:w.y-n.y,moved:false};cv.setPointerCapture(e.pointerId)}return}
+  S.selEdge=null;drag={kind:'pan',sx:e.clientX,sy:e.clientY,px:S.pan.x,py:S.pan.y,moved:false};cv.classList.add('panning');cv.setPointerCapture(e.pointerId);
+});
+cv.addEventListener('pointermove',e=>{if(!drag)return;
+  if(drag.kind==='pan'){S.pan.x=drag.px+e.clientX-drag.sx;S.pan.y=drag.py+e.clientY-drag.sy;if(Math.abs(e.clientX-drag.sx)+Math.abs(e.clientY-drag.sy)>3)drag.moved=true;applyView()}
+  else if(drag.kind==='node'){const w=toWorld(e.clientX,e.clientY);drag.n.x=Math.round(w.x-drag.dx);drag.n.y=Math.round(w.y-drag.dy);drag.el.style.left=drag.n.x+'px';drag.el.style.top=drag.n.y+'px';drag.moved=true;renderWires()}
+  else if(drag.kind==='wire'){temp.b=toWorld(e.clientX,e.clientY);document.querySelectorAll('.port.target').forEach(p=>p.classList.remove('target'));const t=document.elementFromPoint(e.clientX,e.clientY);if(t&&t.dataset&&t.dataset.port==='in')t.classList.add('target');renderWires()}});
+cv.addEventListener('pointerup',e=>{if(!drag)return;
+  if(drag.kind==='wire'){const t=document.elementFromPoint(e.clientX,e.clientY);const ne=t&&t.closest&&t.closest('.node');
+    if(ne&&ne.dataset.id!==temp.from&&T[S.nodes.find(x=>x.id===ne.dataset.id).type].cat!=='source'){const to=ne.dataset.id;if(!S.edges.some(x=>x.from===temp.from&&x.to===to)&&!reaches(to,temp.from))S.edges.push({from:temp.from,to});schedule()}
+    temp=null;document.querySelectorAll('.port.target').forEach(p=>p.classList.remove('target'));renderWires()}
+  else if(drag.kind==='pan'){cv.classList.remove('panning');if(!drag.moved&&S.sel){S.sel=null;renderNodes();renderInspector();renderReport()}renderWires()}
+  else if(drag.kind==='node'&&drag.moved)save();
+  drag=null});
+function reaches(a,b){const st=[a],seen=new Set();while(st.length){const x=st.pop();if(x===b)return true;if(seen.has(x))continue;seen.add(x);S.edges.filter(e=>e.from===x).forEach(e=>st.push(e.to))}return false}
+let gesture=null;
+cv.addEventListener('wheel',e=>{e.preventDefault();if(gesture)return;const r=cv.getBoundingClientRect();
+  if(e.ctrlKey||e.metaKey)zoomAt(e.clientX-r.left,e.clientY-r.top,Math.exp(-clamp(e.deltaY,-60,60)*0.01));
+  else{S.pan.x-=e.deltaX;S.pan.y-=e.deltaY;applyView()}},{passive:false});
+cv.addEventListener('gesturestart',e=>{e.preventDefault();gesture={z:S.zoom}});
+cv.addEventListener('gesturechange',e=>{e.preventDefault();if(!gesture)return;const r=cv.getBoundingClientRect();zoomAt(e.clientX-r.left,e.clientY-r.top,gesture.z*e.scale/S.zoom)});
+cv.addEventListener('gestureend',e=>{e.preventDefault();gesture=null});
+document.addEventListener('contextmenu',e=>{if(!e.target.closest('input,textarea'))e.preventDefault()});
+function zoomAt(px,py,f){const z=clamp(S.zoom*f,0.35,1.8);const k=z/S.zoom;S.pan.x=px-(px-S.pan.x)*k;S.pan.y=py-(py-S.pan.y)*k;S.zoom=z;applyView()}
+$('#zin').onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1.2);$('#zout').onclick=()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1/1.2);
+function fit(){if(!S.nodes.length)return;const xs=S.nodes.map(n=>n.x),ys=S.nodes.map(n=>n.y);const x0=Math.min(...xs),x1=Math.max(...xs)+NW,y0=Math.min(...ys),y1=Math.max(...ys)+90;
+  const w=cv.clientWidth,h=cv.clientHeight;const z=clamp(Math.min((w-60)/(x1-x0),(h-60)/(y1-y0)),0.35,1.1);S.zoom=z;S.pan.x=(w-(x1-x0)*z)/2-x0*z;S.pan.y=(h-(y1-y0)*z)/2-y0*z;applyView()}
+$('#fit').onclick=fit;
+function removeNode(id){S.nodes=S.nodes.filter(n=>n.id!==id);S.edges=S.edges.filter(e=>e.from!==id&&e.to!==id);if(S.sel===id)S.sel=null;S.selEdge=null;renderAll();schedule()}
+document.addEventListener('keydown',e=>{if(/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))return;if(e.key==='Delete'||e.key==='Backspace'){if(S.selEdge!=null){S.edges.splice(S.selEdge,1);S.selEdge=null;renderWires();schedule()}else if(S.sel)removeNode(S.sel)}});
+
+/* ---------- palette ---------- */
+function renderPalette(q=''){const pal=$('#pal');const qq=q.toLowerCase();let h=`<input id="psearch" type="search" placeholder="Search nodes" value="${esc(q)}" aria-label="Search nodes">`;
+  Object.entries(CATS).forEach(([ck,c])=>{const items=Object.entries(T).filter(([k,t])=>t.cat===ck&&(NATIVE||k!=='live')&&(t.title+' '+t.desc).toLowerCase().includes(qq));if(!items.length)return;
+    h+=`<h3><i style="background:var(${c.color})"></i>${c.label}</h3>`;items.forEach(([k,t])=>{h+=`<button class="item" data-add="${k}"><b>${esc(t.title)}</b><span>${esc(t.desc.split('. ')[0].replace(/\.$/,''))}.</span></button>`})});
+  h+=`<p class="hint">Click a node to add it. Drag from a right-hand port to a left-hand port to wire it. Select a wire and press Delete to remove it.${NATIVE?' Scroll with two fingers to pan; pinch to zoom.':''}</p>`;pal.innerHTML=h;
+  const ps=$('#psearch');ps.oninput=()=>{const v=ps.value;renderPalette(v);const n=$('#psearch');n.focus();n.setSelectionRange(v.length,v.length)};
+  pal.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>addNode(b.dataset.add))}
+function addNode(type){const c=toWorld(cv.getBoundingClientRect().left+cv.clientWidth/2,cv.getBoundingClientRect().top+cv.clientHeight/2);const off=(S.nodes.length%5)*18;
+  const n=mk(type,Math.round(c.x-NW/2+off),Math.round(c.y-40+off));
+  const t=T[type];if(t.cat==='criteria'||t.cat==='test'){const src=S.nodes.find(x=>T[x.type].cat==='source');const v=S.nodes.find(x=>x.type==='verdict');if(src)S.edges.push({from:src.id,to:n.id});if(v)S.edges.push({from:n.id,to:v.id})}
+  S.sel=n.id;S.selEdge=null;renderAll();schedule()}
+
+/* ---------- inspector ---------- */
+function renderInspector(){const box=$('#insp');const n=S.nodes.find(x=>x.id===S.sel);
+  if(!n){box.innerHTML=`<h2>Build an analysis</h2><div class="empty"><ol><li>Start from a <b>data source</b>: ${NATIVE?'a live ticker, simulated sample data or your own CSV':'a sample ticker or your own CSV'}.</li><li>Wire it into <b>research criteria</b> and <b>statistical tests</b>.</li><li>Feed results into a <b>Gate</b> for must-pass rules, then a <b>Verdict</b>.</li></ol>Select any node to edit its settings and read its full output.</div>`;return}
+  const t=T[n.type],c=CATS[t.cat];let h=`<div class="cat" style="color:var(${c.color})">${c.label}</div><h2>${esc(t.title)}</h2><p>${esc(t.desc)}</p>`;
+  t.params.forEach(q=>{const id='f_'+n.id+'_'+q.k;const v=n.params[q.k];h+=`<div class="fld"><label for="${id}">${esc(q.label)}</label>`;
+    if(q.type==='select')h+=`<select id="${id}" data-k="${q.k}">${q.options.map(o=>`<option value="${o[0]}"${o[0]===v?' selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
+    else if(q.type==='csv')h+=`<textarea id="${id}" data-k="${q.k}" placeholder="Date,Open,High,Low,Close,Volume&#10;2025-10-09,180.1,182.4,179.6,181.9,4400000">${esc(v)}</textarea><input type="file" id="${id}_file" accept=".csv,.txt,text/csv" aria-label="Upload CSV file">`;
+    else h+=`<input id="${id}" data-k="${q.k}" type="${q.type==='number'?'number':'text'}" value="${esc(v)}"${q.min!=null?` min="${q.min}"`:''}${q.max!=null?` max="${q.max}"`:''}${q.step?` step="${q.step}"`:''}>`;
+    if(q.help)h+=`<span class="help">${esc(q.help)}</span>`;h+='</div>'});
+  const r=R[n.id];h+=`<div class="outbox"><h4>Output</h4>`;
+  if(!r)h+='<div class="empty">Running…</div>';else if(r.error)h+=r.pending?`<span class="chip info">Loading</span><p>${esc(r.error)}</p>`:`<span class="chip err">Error</span><p>${esc(r.error)}</p>`;
+  else{const res=r.res;if(res.verdict){h+=`<dl class="kv"><dt>Verdict</dt><dd>${esc(res.label)}</dd><dt>Score</dt><dd>${res.score>=0?'+':''}${fx(res.score)}</dd><dt>Checks passing</dt><dd>${res.k} of ${res.total}</dd>${res.gateFail?'<dt>Gate</dt><dd>failed</dd>':''}${res.skipped?`<dt>Skipped (errors)</dt><dd>${res.skipped}</dd>`:''}${res.waiting?`<dt>Waiting for data</dt><dd>${res.waiting}</dd>`:''}</dl>`}
+    else if(res.kv){h+=`<dl class="kv">${Object.entries(res.kv).map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}${res.score!=null?`<dt>Score</dt><dd>${res.score>=0?'+':''}${fx(res.score)}</dd>`:''}</dl>${res.detail?`<p>${esc(res.detail)}</p>`:''}`}
+    else h+=`<p>${esc(res.value)}</p>`}
+  h+='</div>';box.innerHTML=h;
+  box.querySelectorAll('[data-k]').forEach(inp=>{const isText=inp.type==='text';if(isText)inp.addEventListener('keydown',e=>{if(e.key==='Enter')inp.blur()});inp.addEventListener(isText?'change':'input',()=>{const q=t.params.find(x=>x.k===inp.dataset.k);let v=inp.value;if(q.type==='number'){v=parseFloat(v);if(!Number.isFinite(v))return}n.params[q.k]=v;
+    const sm=nodesEl.querySelector(`[data-id="${n.id}"] .sum`);if(sm)sm.textContent=t.sum(n.params);clearTimeout(tmr);tmr=setTimeout(()=>{run();paintStatus();renderOutputOnly();renderReport();save()},200)})});
+  const f=box.querySelector('input[type=file]');if(f)f.onchange=()=>{const file=f.files[0];if(!file)return;const rd=new FileReader();rd.onload=()=>{n.params.csv=String(rd.result);if(n.params.symbol==='MY STOCK')n.params.symbol=file.name.replace(/\.[^.]+$/,'').toUpperCase().slice(0,12);renderNodes();schedule()};rd.readAsText(file)}}
+function renderOutputOnly(){const ae=document.activeElement;const id=ae&&ae.id;const pos=ae&&ae.selectionStart;renderInspector();if(id){const el=document.getElementById(id);if(el){el.focus();try{if(pos!=null)el.setSelectionRange(pos,pos)}catch(_){}}}}
+
+/* ---------- report ---------- */
+function focusCtx(){let n=S.nodes.find(x=>x.id===S.sel);if(n&&R[n.id]&&R[n.id].ctx&&T[n.type].cat!=='source')return{n,r:R[n.id]};
+  const v=S.nodes.find(x=>x.type==='verdict'&&R[x.id]&&R[x.id].ctx);if(v)return{n:v,r:R[v.id]};if(n&&R[n.id]&&R[n.id].ctx)return{n,r:R[n.id]};
+  const s=S.nodes.find(x=>R[x.id]&&R[x.id].ctx);return s?{n:s,r:R[s.id]}:null}
+function renderReport(){const f=focusCtx();const rh=$('#rh'),tb=$('#tbl');
+  if(!f){const loading=S.nodes.some(x=>R[x.id]&&R[x.id].pending);rh.innerHTML=loading?'<span class="sym">Loading prices…</span><span class="src">Yahoo Finance</span>':'<span class="sym">No data</span><span class="src">Add a data source</span>';tb.innerHTML='';$('#legend').innerHTML='';drawChart(null);return}
+  const s=f.r.ctx.series,c=s.close,n=c.length;const ch=c[n-1]/c[n-2]-1;
+  const vNode=f.n.type==='verdict'?R[f.n.id].res:null;
+  let vh='';if(vNode){const pos=(vNode.score+1)/2*100;vh=`<div class="verdict"><span class="chip ${vNode.label==='Bullish'?'pass':vNode.label==='Neutral'?'info':'fail'}">${esc(vNode.label)}</span><span class="lbl">${vNode.score>=0?'+':''}${fx(vNode.score)}</span><span class="gauge" title="Score from −1 to +1"><i style="left:${clamp(pos,0,100)}%"></i></span><span class="src">${vNode.k}/${vNode.total} checks pass</span></div>`}
+  rh.innerHTML=`<span class="sym">${esc(s.symbol)}</span><span class="px">${fx(c[n-1])} <span style="color:var(${ch>=0?'--up':'--down'})">${pct(ch,2)}</span></span><span class="src">${s.name&&s.name!==s.symbol?esc(s.name)+' · ':''}${esc(s.source)} · ${esc(s.dates[0])} → ${esc(s.dates[n-1])}</span>${vh}`;
+  const res=f.r.ctx.results.concat(f.n.type!=='verdict'&&f.r.res&&f.r.res.id&&!f.r.ctx.results.includes(f.r.res)?[]:[]);
+  const bt=res.find(r=>r.bt);
+  let h=`<table><thead><tr><th>Check</th><th>Reading</th><th>Result</th><th>Score</th></tr></thead><tbody>`;
+  if(!res.length)h+=`<tr><td colspan="4" class="empty">Wire criteria and tests into the verdict to see results here.</td></tr>`;
+  res.forEach(r=>{const sc=r.score;const bar=sc==null?'<span class="d">—</span>':`<span class="bar"><i style="left:${sc>=0?50:50+sc*50}%;width:${Math.abs(sc)*50}%;background:var(${sc>=0?'--up':'--down'})"></i></span>${sc>=0?'+':''}${fx(sc)}${r.weight!=null&&r.weight!==1?` <span class="d" style="display:inline">×${r.weight}</span>`:''}`;
+    h+=`<tr class="click" data-goto="${r.id}"><td><b>${esc(r.title)}</b><span class="d">${esc(r.detail||'')}</span></td><td class="num">${esc(r.value)}</td><td>${r.pass===true?'<span class="chip pass">Pass</span>':r.pass===false?'<span class="chip fail">Fail</span>':'<span class="chip info">Info</span>'}${r.gate?' <span class="chip info">Gate</span>':''}</td><td class="num">${bar}</td></tr>`});
+  h+=`</tbody></table><p class="disc">Educational tool, not investment advice. ${NATIVE?'Live prices come from Yahoo Finance and can be delayed; the sample ticker node simulates prices.':'The sample ticker node simulates prices; load a CSV for real market data.'} Backtests on one history overstate future results.</p>`;tb.innerHTML=h;
+  tb.querySelectorAll('[data-goto]').forEach(tr=>tr.onclick=()=>{S.sel=tr.dataset.goto;renderNodes();renderInspector()});
+  $('#legend').innerHTML=`<span><i style="background:var(--ink)"></i>Close</span><span><i style="background:var(--c-criteria)"></i>SMA 50</span><span><i style="background:var(--c-source)"></i>SMA 200</span>${bt?`<span><i style="background:var(--c-test)"></i>Strategy equity</span><span><i style="background:var(--muted)"></i>Buy &amp; hold</span><span style="color:var(--up)">▲ buy</span><span style="color:var(--down)">▼ sell</span>`:''}`;
+  drawChart(s,bt&&bt.bt)}
+function drawChart(s,bt){const cvs=$('#chart');const w=cvs.clientWidth,h=cvs.clientHeight;const dpr=window.devicePixelRatio||1;cvs.width=w*dpr;cvs.height=h*dpr;const g=cvs.getContext('2d');g.scale(dpr,dpr);g.clearRect(0,0,w,h);if(!s||w<10||h<10)return;
+  const cs=getComputedStyle(document.documentElement);const col=k=>cs.getPropertyValue(k).trim();
+  const n=s.close.length;const L=8,Rp=56;const priceH=bt?h*0.64:h-18;const eqTop=priceH+12,eqH=h-eqTop-14;
+  const s50=sma(s.close,50),s200=sma(s.close,200);const vals=s.close.concat(s50.filter(x=>x),s200.filter(x=>x));let lo=Math.min(...vals),hi=Math.max(...vals);const pad=(hi-lo)*0.06;lo=lo>0?Math.max(0,lo-pad):lo-pad;hi+=pad;
+  const X=i=>L+(w-L-Rp)*i/(n-1);const Y=v=>6+(priceH-6)*(1-(v-lo)/(hi-lo));
+  g.font='10.5px ui-monospace,Menlo,monospace';g.fillStyle=col('--muted');g.strokeStyle=col('--line');g.lineWidth=1;
+  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4;const y=Y(v);g.globalAlpha=.7;g.beginPath();g.moveTo(L,y);g.lineTo(w-Rp,y);g.stroke();g.globalAlpha=1;g.fillText(v>=1000?v.toFixed(0):v.toFixed(2),w-Rp+6,y+3)}
+  const line=(a,c,lw)=>{g.strokeStyle=c;g.lineWidth=lw;g.beginPath();let st=false;a.forEach((v,i)=>{if(v==null)return;const x=X(i),y=Y(v);st?g.lineTo(x,y):(g.moveTo(x,y),st=true)});g.stroke()};
+  const grad=g.createLinearGradient(0,6,0,priceH);grad.addColorStop(0,col('--accent-soft'));grad.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=grad;g.beginPath();g.moveTo(X(0),priceH);s.close.forEach((v,i)=>g.lineTo(X(i),Y(v)));g.lineTo(X(n-1),priceH);g.closePath();g.fill();
+  line(s200,col('--c-source'),1.4);line(s50,col('--c-criteria'),1.4);line(s.close,col('--ink'),1.5);
+  g.fillStyle=col('--ink');g.beginPath();g.arc(X(n-1),Y(s.close[n-1]),3.2,0,7);g.fill();
+  if(bt){bt.trades.forEach(t=>{const tri=(i,up)=>{const x=X(i),y=Y(s.close[i])+(up?10:-10);g.fillStyle=col(up?'--up':'--down');g.beginPath();if(up){g.moveTo(x,y-5);g.lineTo(x-4,y+2);g.lineTo(x+4,y+2)}else{g.moveTo(x,y+5);g.lineTo(x-4,y-2);g.lineTo(x+4,y-2)}g.fill()};tri(t.in,true);if(!t.open)tri(t.out,false)});
+    const all=bt.eq.concat(bt.bh);const elo=Math.min(...all),ehi=Math.max(...all);const EY=v=>eqTop+eqH*(1-(v-elo)/((ehi-elo)||1));
+    g.strokeStyle=col('--line');g.beginPath();g.moveTo(L,eqTop+eqH);g.lineTo(w-Rp,eqTop+eqH);g.stroke();
+    const el=(a,c,lw)=>{g.strokeStyle=c;g.lineWidth=lw;g.beginPath();a.forEach((v,i)=>{const x=X(i),y=EY(v);i?g.lineTo(x,y):g.moveTo(x,y)});g.stroke()};el(bt.bh,col('--muted'),1.2);el(bt.eq,col('--c-test'),1.8);
+    g.fillStyle=col('--muted');g.fillText('×'+last(bt.eq).toFixed(2),w-Rp+6,EY(last(bt.eq))+3);g.fillText('Equity',L+2,eqTop+10)}
+  g.fillStyle=col('--muted');g.fillText(s.dates[0],L,h-3);const dl=s.dates[n-1];g.fillText(dl,w-Rp-g.measureText(dl).width,h-3)}
+window.addEventListener('resize',()=>renderReport());
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>{renderReport()});
+new MutationObserver(()=>renderReport()).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+/* ---------- persistence + Mac app bridge ---------- */
+const sig=()=>JSON.stringify({n:S.nodes,e:S.edges});
+let baseline=null;
+const docJSON=()=>JSON.stringify({app:'Ticker Flow',version:1,nodes:S.nodes,edges:S.edges,uid,sel:S.sel});
+function save(){const doc=docJSON();
+  if(NATIVE){native({cmd:'changed',doc,dirty:sig()!==baseline}).catch(()=>{});return}
+  try{localStorage.setItem('tickerflow.v1',doc)}catch(_){}}
+function applyDoc(d){
+  if(!d||!Array.isArray(d.nodes)||!d.nodes.length||!d.nodes.every(n=>n&&T[n.type]))return false;
+  const ids=new Set(d.nodes.map(n=>n.id));
+  S.nodes=d.nodes.map(n=>{const params={};T[n.type].params.forEach(q=>params[q.k]=q.def);return{id:String(n.id),type:n.type,x:+n.x||0,y:+n.y||0,params:Object.assign(params,n.params||{})}});
+  S.edges=(Array.isArray(d.edges)?d.edges:[]).filter(e=>e&&ids.has(e.from)&&ids.has(e.to));
+  uid=Math.max(+d.uid||0,...S.nodes.map(n=>parseInt(n.id.slice(1),10)||0))+1;
+  S.sel=ids.has(d.sel)?d.sel:null;S.selEdge=null;return true}
+function restore(){try{
+  if(NATIVE){if(!applyDoc(window.TF_AUTOSAVE))return false;baseline=window.TF_DIRTY?'(unsaved)':sig();return true}
+  if(!applyDoc(JSON.parse(localStorage.getItem('tickerflow.v1'))))return false;baseline=sig();return true}catch(_){return false}}
+function centerWorld(){const r=cv.getBoundingClientRect();return toWorld(r.left+cv.clientWidth/2,r.top+cv.clientHeight/2)}
+window.TF={
+  newDoc:()=>{loadTemplate('blank')},
+  loadTemplate:k=>{if(TEMPLATES[k])loadTemplate(k)},
+  loadDoc:text=>{let d;try{d=JSON.parse(text)}catch(_){return "The file isn't valid JSON."}
+    if(!applyDoc(d))return "This file isn't a Ticker Flow workflow, or it uses nodes this version doesn't know.";
+    baseline=sig();renderAll();requestAnimationFrame(fit);schedule();return ''},
+  markSaved:()=>{baseline=sig();save()},
+  importCSV:(name,text)=>{let target=S.nodes.find(n=>n.id===S.sel&&T[n.type].cat==='source');const srcs=S.nodes.filter(n=>T[n.type].cat==='source');
+    if(!target&&srcs.length===1)target=srcs[0];
+    const params={symbol:String(name||'CSV').toUpperCase().slice(0,16),csv:String(text||'')};
+    if(target){target.type='csv';target.params=params}else{const c=centerWorld();target=mk('csv',Math.round(c.x-NW/2),Math.round(c.y-40));target.params=params}
+    S.sel=target.id;S.selEdge=null;renderAll();schedule();return ''},
+  exportResults:()=>{const f=focusCtx();if(!f||!f.r.ctx.results.length)return null;const s=f.r.ctx.series;
+    const q=v=>{v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+    const rows=[['Symbol',s.symbol],['Source',s.source],['From',s.dates[0]],['To',last(s.dates)],['Last close',fx(last(s.close))]];
+    const v=f.n.type==='verdict'?R[f.n.id].res:null;if(v)rows.push(['Verdict',v.label],['Score',fx(v.score)],['Checks passing',`${v.k} of ${v.total}`]);
+    rows.push([],['Check','Reading','Result','Score','Weight','Notes']);
+    f.r.ctx.results.forEach(r=>rows.push([r.title,r.value,r.pass===true?'Pass':r.pass===false?'Fail':'Info',r.score==null?'':fx(r.score),r.weight==null?'':r.weight,r.detail||'']));
+    return{name:`${s.symbol} ${last(s.dates)} results.csv`,csv:rows.map(r=>r.map(q).join(',')).join('\n')+'\n'}},
+  refresh:()=>{LIVE={};schedule()},
+  fit:()=>fit(),
+  zoomIn:()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1.2),
+  zoomOut:()=>zoomAt(cv.clientWidth/2,cv.clientHeight/2,1/1.2)
+};
+
+$('#loadTpl').onclick=()=>{const k=$('#tpl').value;if(NATIVE)native({cmd:'template',key:k}).catch(()=>{});else loadTemplate(k)};
+if(NATIVE){const b=$('#refresh');b.hidden=false;b.onclick=()=>TF.refresh()}
+renderPalette();
+if(restore()){renderAll();requestAnimationFrame(fit);run();paintStatus();renderInspector();renderReport();save()}else loadTemplate('trend');
+</script>
+</body>
+</html>
